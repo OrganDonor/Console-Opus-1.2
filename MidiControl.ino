@@ -1,5 +1,5 @@
 #include <MIDI.h>
-// MIDI Controller for Organ Donor Opus 1.2
+// MIDI Controller for Organ Donor Opus 1.3
 // Two manuals and two ranks, control panel with Organelle (12 buttons)
 // Requires Arduino MEGA 2560 board and Arduino 1.5.8 (or at least not 1.0.6)
 // 2014-10-07 ptw created.
@@ -19,6 +19,10 @@
 //                Added trace of input notes in debug mode.
 //                Set a reasonable default so both keyboards work on powerup.
 //                Changed baud rate on Organelle's MIDI port to 38400; RasPi can't easily do 31250.
+// 2015-09-29 ptw Moved organ output to Serial2. Third MIDI adapter is now connected to the Organelle in
+//                both directions. Organelle manages external inputs and relays them to Serial3. We send
+//                a copy of the keyboard input to the Organelle for, e.g., game play.
+//                Removed debug mode; we aren't using Serial anymore.
 //
 // Pin assignments for the control console:
 #define PIN_GREAT4MAIN  39
@@ -48,7 +52,7 @@
 #define PIN_SWELL8SUPER_LED 30
 
 #define PIN_DEBUG_ENABLE  2
-boolean debugMode;
+//boolean debugMode;
 
 // Control console is a bunch of switches, which are read into these flags.
 boolean flag4GreatMain, flag4SwellMain, flag8GreatMain, flag8SwellMain;	// enable each rank on each manual
@@ -59,6 +63,7 @@ boolean flag8GreatSuper, flag8SwellSuper;	// super-octave couplers for 8' rank
 
 // Other flags can be set by a SysEx command from the Organelle
 boolean flagMidi = true;		// enable external MIDI input (defaults to enabled)
+boolean flagKBecho = true;  // enable keyboard echo to the Organelle (defaults to enabled)
 boolean flagOther = true;   // does nothing ... yet.
 // SysEx format:
 //  Byte#   Value     Meaning
@@ -66,7 +71,8 @@ boolean flagOther = true;   // does nothing ... yet.
 //    1       7D      Manufacturer code reserved for "educational use"
 //    2       AA      my command code for setting the flags
 //    3    0 or 1     flagMidi
-//    4    0 or 1     flagOther
+//    4    0 or 1     flagKBecho
+//    5    0 or 1     flagOther
 //    etc. for more flags
 //    N       F7      End of SysEx command, defined by MIDI standard
 
@@ -77,6 +83,10 @@ boolean flagOther = true;   // does nothing ... yet.
 
 #define SYSEX_CMD_FLASH    0xA0     // debug feature to flash the console from Organelle
 
+// When we relay key events to the Organelle, we include information about which manual
+// was hit by using different channel numbers for the two manuals.
+#define GREAT_CHANNEL 0
+#define SWELL_CHANNEL 1
 
 // There are three hardware MIDI shields connected, to Serial1 and Serial2 and Serial3.
 // Each has all three MIDI connectors: IN, OUT, and THRU.
@@ -87,17 +97,19 @@ boolean flagOther = true;   // does nothing ... yet.
 // The OUT connector on Serial2 is available for future expansion.
 // The OUT connector on Serial3 is the output to the Organ Donor windchest (two J-Omega MTPs chained).
 // The THRU connectors are not currently used.
-// In addition to the three MIDI shields, the default debug serial port (Serial) is connected through
+//
+// In addition to the three MIDI shields, the default debug serial port (Serial) was once connected through
 // a voltage level converter, bidirectionally, to the serial port on the Organelle's Raspberry Pi.
 // This interface is also used as MIDI during normal operation, though it is not electrically MIDI.
 // It can also be used to carry debug data; this is enabled by grounding digital pin 2.
+// We don't use this anymore.
 
-#define  midiOrgan  midi3   // output to the MTPs
+#define  midiOrgan  midi2   // output to the MTPs
 
 #define  midiGreat  midi1		// input from lower keyboard
 #define  midiSwell  midi2		// input from upper keyboard
-#define  midiExt    midi3		// input from external MIDI controller
-#define	 midiElle   midi0		// input from and output to the Raspberry Pi (Organelle)
+#define  midiExt    midi3		// input from external MIDI controller (now the Organelle)
+#define	 midiElle   midi3		// output to the Raspberry Pi (Organelle)
 
 //MIDI_CREATE_INSTANCE(HardwareSerial, Serial,  midi0)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi1)
@@ -185,9 +197,9 @@ void incrementalReOff(void)
   static byte rank = 0;
   static byte pitch = 0;
 
-  if (debugMode) {
-    return;
-  }
+ // if (debugMode) {
+ //   return;
+ // }
   
   // Don't turn off a note that's supposed to be on!
   // Just skip this round in that case, no need to search for a note to turn off.
@@ -253,11 +265,17 @@ void requestOff(byte flag, byte rank, byte pitch)
 // message arrives from one of the manuals. They are responsible for mapping
 // the keypress into one or more note requests, depending on the current
 // settings of the stops and couplers on the control panel.
-void handleGreatNoteOn(byte channel, byte pitch, byte unused_velocity)
+void handleGreatNoteOn(byte channel, byte pitch, byte velocity)
 {
-  if (debugMode) {
-    Serial.print("Great note ");
-    Serial.println(pitch);
+//  if (debugMode) {
+//    Serial.print("Great note ");
+//    Serial.println(pitch);
+//  }
+
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendNoteOn(pitch, velocity, GREAT_CHANNEL);
   }
   
   // If we are playing the 8' rank with the Great manual,
@@ -285,8 +303,14 @@ void handleGreatNoteOn(byte channel, byte pitch, byte unused_velocity)
   }
 }
 
-void handleGreatNoteOff(byte channel, byte pitch, byte unused_velocity)
+void handleGreatNoteOff(byte channel, byte pitch, byte velocity)
 {
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendNoteOff(pitch, velocity, GREAT_CHANNEL);
+  }
+  
   // First, handle the normal note for this manual
   requestOff(NOTE_PRIME, RANK0, pitch);
   
@@ -308,11 +332,17 @@ void handleGreatNoteOff(byte channel, byte pitch, byte unused_velocity)
 
 }
 
-void handleSwellNoteOn(byte channel, byte pitch, byte unused_velocity)
+void handleSwellNoteOn(byte channel, byte pitch, byte velocity)
 {
-  if (debugMode) {
-    Serial.print("Swell note ");
-    Serial.println(pitch);
+//  if (debugMode) {
+//    Serial.print("Swell note ");
+//    Serial.println(pitch);
+//  }
+
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendNoteOn(pitch, velocity, SWELL_CHANNEL);
   }
   
   // If we are playing the 4' rank with the Swell manual,
@@ -340,8 +370,14 @@ void handleSwellNoteOn(byte channel, byte pitch, byte unused_velocity)
   }
 }
 
-void handleSwellNoteOff(byte channel, byte pitch, byte unused_velocity)
+void handleSwellNoteOff(byte channel, byte pitch, byte velocity)
 {
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendNoteOff(pitch, velocity, SWELL_CHANNEL);
+  }
+  
     // First, handle the normal note for this manual
   requestOff(NOTE_PRIME, RANK1, pitch);
   
@@ -365,10 +401,10 @@ void handleSwellNoteOff(byte channel, byte pitch, byte unused_velocity)
 
 void handleExtNoteOn(byte channel, byte pitch, byte velocity)
 {
-  if (debugMode) {
-    Serial.print("External note ");
-    Serial.println(pitch);
-  }
+//  if (debugMode) {
+//    Serial.print("External note ");
+//    Serial.println(pitch);
+//  }
   
   // External MIDI just passes thru, if enabled
   if (flagMidi)
@@ -395,22 +431,22 @@ void handleExtNoteOff(byte channel, byte pitch, byte unused_velocity)
 }
 
 // Handle messages from the Organelle. Notes just pass through.
-void handleElleNoteOn(byte channel, byte pitch, byte velocity)
-{
-	if (velocity != 0)
-	{
-		requestOn(NOTE_PRIME, 1, pitch);
-	}
-	else
-	{
-		requestOff(NOTE_PRIME, 1, pitch);
-	}
-}
+//void handleElleNoteOn(byte channel, byte pitch, byte velocity)
+//{
+//	if (velocity != 0)
+//	{
+//		requestOn(NOTE_PRIME, 1, pitch);
+//	}
+//	else
+//	{
+//		requestOff(NOTE_PRIME, 1, pitch);
+//	}
+//}
 
-void handleElleNoteOff(byte channel, byte pitch, byte unused_velocity)
-{
-	requestOff(NOTE_PRIME, 1, pitch);
-}
+//void handleElleNoteOff(byte channel, byte pitch, byte unused_velocity)
+//{
+//	requestOff(NOTE_PRIME, 1, pitch);
+//}
 
 void handleElleSysEx(byte *inData, unsigned int inSize)
 {
@@ -419,7 +455,10 @@ void handleElleSysEx(byte *inData, unsigned int inSize)
       flagMidi = inData[SYSEX_DATA_OFFSET];
     }
     if (inSize >= SYSEX_BASE_SIZE+2) {
-      flagOther = inData[SYSEX_DATA_OFFSET+1];
+      flagKBecho = inData[SYSEX_DATA_OFFSET+1];
+    }
+    if (inSize >= SYSEX_BASE_SIZE+3) {
+      flagOther = inData[SYSEX_DATA_OFFSET+2];
     }
     // can add more bytes of SysEx data, compatibly.
   }
@@ -572,12 +611,12 @@ void setup()
 {
 
   // Check what mode the default serial port will be used in.
-  pinMode(PIN_DEBUG_ENABLE, INPUT_PULLUP);
-  debugMode = !digitalRead(PIN_DEBUG_ENABLE); // ground to enable debug
-  if (debugMode) {
+ // pinMode(PIN_DEBUG_ENABLE, INPUT_PULLUP);
+ // debugMode = !digitalRead(PIN_DEBUG_ENABLE); // ground to enable debug
+ // if (debugMode) {
     Serial.begin(115200);
-    Serial.println("Opus 1.2 MIDI Controller");
-  }
+    Serial.println("Opus 1.3 MIDI Controller");
+ // }
   
   pinMode(PIN_GREAT4MAIN, INPUT_PULLUP);
   pinMode(PIN_GREAT4SUB, INPUT_PULLUP);
@@ -612,27 +651,27 @@ void setup()
   midiSwell.setHandleNoteOff(handleSwellNoteOff);
   midiExt.setHandleNoteOn(handleExtNoteOn);
   midiExt.setHandleNoteOff(handleExtNoteOff);
-  if (!debugMode) {
-    midiElle.setHandleNoteOn(handleElleNoteOn);
-    midiElle.setHandleNoteOff(handleElleNoteOff);
+  //if (!debugMode) {
+  //  midiElle.setHandleNoteOn(handleElleNoteOn);
+  //  midiElle.setHandleNoteOff(handleElleNoteOff);
     midiElle.setHandleSystemExclusive(handleElleSysEx);
-  }
+  //}
   
   // Begin receive processing. Listen to all channels so we don't care about keyboard configuration.
   midiGreat.begin(MIDI_CHANNEL_OMNI);
   midiSwell.begin(MIDI_CHANNEL_OMNI);
   midiExt.begin(MIDI_CHANNEL_OMNI);
-  if (!debugMode) {
-    midiElle.begin(MIDI_CHANNEL_OMNI);
-  }
+  //if (!debugMode) {
+  //  midiElle.begin(MIDI_CHANNEL_OMNI);
+  //}
   
   // We don't want automatic echoing of MIDI messages.
   midiGreat.turnThruOff();
   midiSwell.turnThruOff();
   midiExt.turnThruOff();
-  if (!debugMode) {
-    midiElle.turnThruOff();
-  }
+  //if (!debugMode) {
+  //  midiElle.turnThruOff();
+  //}
   
   // Cancel anything going on right now
   allOff();
@@ -650,9 +689,9 @@ void loop()
   midiGreat.read();
   midiSwell.read();
   midiExt.read();
-  if (!debugMode) {
-    midiElle.read();
-  }
+  //if (!debugMode) {
+  //  midiElle.read();
+  //}
 
   if (millis() > lasttick + 5)
   {
