@@ -85,7 +85,7 @@ boolean flagOther = true;   // does nothing ... yet.
 
 // When we relay key events to the Organelle, we include information about which manual
 // was hit by using different channel numbers for the two manuals.
-#define GREAT_CHANNEL 0
+#define GREAT_CHANNEL 2
 #define SWELL_CHANNEL 1
 
 // There are three hardware MIDI shields connected, to Serial1 and Serial2 and Serial3.
@@ -332,6 +332,25 @@ void handleGreatNoteOff(byte channel, byte pitch, byte velocity)
 
 }
 
+void handleGreatPitchBend(byte channel, int bend)
+{  
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+  	midiElle.sendPitchBend(bend, GREAT_CHANNEL);
+  }
+}
+
+void handleGreatControlChange(byte channel, byte number, byte value)
+{
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendControlChange(number, value, GREAT_CHANNEL);
+  }
+  
+}
+
 void handleSwellNoteOn(byte channel, byte pitch, byte velocity)
 {
 //  if (debugMode) {
@@ -397,6 +416,25 @@ void handleSwellNoteOff(byte channel, byte pitch, byte velocity)
     requestOff(NOTE_RANK_SUPER, RANK0, pitch+12);
   }
 
+}
+
+void handleSwellPitchBend(byte channel, int bend)
+{
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+  	midiElle.sendPitchBend(bend, SWELL_CHANNEL);
+  }
+}
+
+void handleSwellControlChange(byte channel, byte number, byte value)
+{
+  // Let the Organelle know about this event
+  if (flagKBecho)
+  {
+    midiElle.sendControlChange(number, value, SWELL_CHANNEL);
+  }
+  
 }
 
 void handleExtNoteOn(byte channel, byte pitch, byte velocity)
@@ -647,8 +685,12 @@ void setup()
   // All processing is handled in the receive callbacks for NoteOn and NoteOff.
   midiGreat.setHandleNoteOn(handleGreatNoteOn);
   midiGreat.setHandleNoteOff(handleGreatNoteOff);
+  midiGreat.setHandlePitchBend(handleGreatPitchBend);
+  midiGreat.setHandleControlChange(handleGreatControlChange);
   midiSwell.setHandleNoteOn(handleSwellNoteOn);
   midiSwell.setHandleNoteOff(handleSwellNoteOff);
+  midiSwell.setHandlePitchBend(handleSwellPitchBend);
+  midiSwell.setHandleControlChange(handleSwellControlChange);
   midiExt.setHandleNoteOn(handleExtNoteOn);
   midiExt.setHandleNoteOff(handleExtNoteOff);
   //if (!debugMode) {
