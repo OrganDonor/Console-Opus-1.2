@@ -62,26 +62,29 @@ boolean flag8GreatSub, flag8SwellSub;		// sub-octave couplers for 8' rank
 boolean flag8GreatSuper, flag8SwellSuper;	// super-octave couplers for 8' rank
 
 // Other flags can be set by a SysEx command from the Organelle
-boolean flagMidi = true;		// enable external MIDI input (defaults to enabled)
+byte    flagMidi = 1;		// enable external MIDI input (0 means no external MIDI;
+                    		//                             1 means map everything to rank 1;
+                        	//                             2 means map channel 1 and 2 to rank 0 and 1.
+                            //                             Defaults to 1.
 boolean flagKBecho = true;  // enable keyboard echo to the Organelle (defaults to enabled)
-boolean flagOther = true;   // does nothing ... yet.
+// etc.
+//
 // SysEx format:
 //  Byte#   Value     Meaning
 //    0       F0      Start of SysEx command, defined by MIDI standard
 //    1       7D      Manufacturer code reserved for "educational use"
-//    2       AA      my command code for setting the flags
+//    2       55      my command code for setting the flags
 //    3    0 or 1     flagMidi
 //    4    0 or 1     flagKBecho
-//    5    0 or 1     flagOther
 //    etc. for more flags
 //    N       F7      End of SysEx command, defined by MIDI standard
 
-#define SYSEX_CMD_SETFLAGS 0xAA
+#define SYSEX_CMD_SETFLAGS 0x55
 #define SYSEX_BASE_SIZE    4      // size of a SysEx with just the command code in it
 #define SYSEX_CMD_OFFSET   2      // index of the command code
 #define SYSEX_DATA_OFFSET  3      // index of first byte after the command code
 
-#define SYSEX_CMD_FLASH    0xA0     // debug feature to flash the console from Organelle
+#define SYSEX_CMD_FLASH    0x50     // debug feature to flash the console from Organelle
 
 // When we relay key events to the Organelle, we include information about which manual
 // was hit by using different channel numbers for the two manuals.
@@ -437,54 +440,79 @@ void handleSwellControlChange(byte channel, byte number, byte value)
   
 }
 
+// External notes are passed through to the windchest, according to the
+// setting of the value of flagMidi.
+// flagMidi = 0 means no passthrough.
+// flagMidi = 1 means all notes go out to rank 1 (4' rank).
+// flagMidi = 2 means notes go out according to the channel they came in on:
+// 		channel 1 = rank 0 = 8' rank
+//		channel 2 = rank 1 = 4' rank
+//		channel >2 = no passthrough
+// It's the Organelle's responsibility to make sure no external notes are playing when
+// flagMidi changed; they might get stuck on.
 void handleExtNoteOn(byte channel, byte pitch, byte velocity)
 {
-//  if (debugMode) {
-//    Serial.print("External note ");
-//    Serial.println(pitch);
-//  }
-  
-  // External MIDI just passes thru, if enabled
-  if (flagMidi)
-  {
-    if (velocity != 0)
-    {
-      requestOn(NOTE_PRIME, 1, pitch);
-    }
-    else
-    {
-      requestOff(NOTE_PRIME, 1, pitch);
-    }
-  }
+	byte rank;
+	
+	switch(flagMidi)
+	{
+		case 0:
+			return;
+		
+		case 1:
+			rank = 1;
+			break;
+			
+		case 2:
+			if (channel == 1)
+				rank = 0;
+			else if (channel == 2)
+				rank = 1;
+			else
+				return;
+			break;
+		default:
+			return;
+	}
+		
+	if (velocity != 0)
+	{
+		requestOn(NOTE_PRIME, rank, pitch);
+	}
+	else
+	{
+		requestOff(NOTE_PRIME, rank, pitch);
+	}
 }
+
 
 void handleExtNoteOff(byte channel, byte pitch, byte unused_velocity)
 {
-  // External MIDI just passes thru, if enabled
-  if (flagMidi)
-  {
-    requestOff(NOTE_PRIME, 1, pitch);
-  }
-
+	byte rank;
+	
+	switch(flagMidi)
+	{
+		case 0:
+			return;
+		
+		case 1:
+			rank = 1;
+			break;
+			
+		case 2:
+			if (channel == 1)
+				rank = 0;
+			else if (channel == 2)
+				rank = 1;
+			else
+				return;
+			break;
+		default:
+			return;
+	}
+	
+    requestOff(NOTE_PRIME, rank, pitch);
 }
-
-// Handle messages from the Organelle. Notes just pass through.
-//void handleElleNoteOn(byte channel, byte pitch, byte velocity)
-//{
-//	if (velocity != 0)
-//	{
-//		requestOn(NOTE_PRIME, 1, pitch);
-//	}
-//	else
-//	{
-//		requestOff(NOTE_PRIME, 1, pitch);
-//	}
-//}
-
-//void handleElleNoteOff(byte channel, byte pitch, byte unused_velocity)
-//{
-//	requestOff(NOTE_PRIME, 1, pitch);
-//}
 
 void handleElleSysEx(byte *inData, unsigned int inSize)
 {
@@ -494,9 +522,6 @@ void handleElleSysEx(byte *inData, unsigned int inSize)
     }
     if (inSize >= SYSEX_BASE_SIZE+2) {
       flagKBecho = inData[SYSEX_DATA_OFFSET+1];
-    }
-    if (inSize >= SYSEX_BASE_SIZE+3) {
-      flagOther = inData[SYSEX_DATA_OFFSET+2];
     }
     // can add more bytes of SysEx data, compatibly.
   }
