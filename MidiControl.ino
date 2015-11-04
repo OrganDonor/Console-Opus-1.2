@@ -67,6 +67,7 @@ byte    flagMidi = 1;		// enable external MIDI input (0 means no external MIDI;
                         	//                             2 means map channel 1 and 2 to rank 0 and 1.
                             //                             Defaults to 1.
 boolean flagKBecho = true;  // enable keyboard echo to the Organelle (defaults to enabled)
+boolean flagGhostBuster = true;	// enable constant stream of note_off to silent phantom notes
 // etc.
 //
 // SysEx format:
@@ -74,8 +75,9 @@ boolean flagKBecho = true;  // enable keyboard echo to the Organelle (defaults t
 //    0       F0      Start of SysEx command, defined by MIDI standard
 //    1       7D      Manufacturer code reserved for "educational use"
 //    2       55      my command code for setting the flags
-//    3    0 or 1     flagMidi
+//    3     0,1,2     flagMidi
 //    4    0 or 1     flagKBecho
+//	  5    0 or 1     flagGhostBuster
 //    etc. for more flags
 //    N       F7      End of SysEx command, defined by MIDI standard
 
@@ -199,10 +201,10 @@ void incrementalReOff(void)
 {
   static byte rank = 0;
   static byte pitch = 0;
-
- // if (debugMode) {
- //   return;
- // }
+  
+  if (!flagGhostBuster) {
+  	return;
+  }
   
   // Don't turn off a note that's supposed to be on!
   // Just skip this round in that case, no need to search for a note to turn off.
@@ -522,6 +524,9 @@ void handleElleSysEx(byte *inData, unsigned int inSize)
     }
     if (inSize >= SYSEX_BASE_SIZE+2) {
       flagKBecho = inData[SYSEX_DATA_OFFSET+1];
+    }
+    if (inSize >= SYSEX_BASE_SIZE+2) {
+      flagGhostBuster = inData[SYSEX_DATA_OFFSET+2];
     }
     // can add more bytes of SysEx data, compatibly.
   }
