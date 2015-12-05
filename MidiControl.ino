@@ -1,29 +1,10 @@
 #include <MIDI.h>
-// MIDI Controller for Organ Donor Opus 1.3
+// MIDI Controller for Organ Donor Opus 1.2
 // Two manuals and two ranks, control panel with Organelle (12 buttons)
-// Requires Arduino MEGA 2560 board and Arduino 1.5.8 (or at least not 1.0.6)
+// Requires Arduino MEGA 2560 board and Arduino >=1.5.8 (or at least not 1.0.6)
 // 2014-10-07 ptw created.
-// 2014-10-14 ptw updated to match as-built hardware.
-// 2014-10-18 ptw mapped external MIDI inputs to channel 1
-// 2015-06-11 ptw reduced max note count (blowing fuses!) and sent allOff() when external MIDI switched off
-// 2015-06-11 ptw send Note Off commands to unused notes one by one instead of all in a batch
-// 2015-06-12 ptw Integrated note counting with note request tracking, so we don't mistakenly count down
-//                for the Note Off corresponding to a Note On that was discarded.
-// 2015-08-21 ptw Conversion to 12-button stops/coupler logic begun.
-// 2015-08-22 ptw Pin assignments updated to as-built configuration for new console with Organelle.
-// 2015-08-23 ptw Handle momentary switches, bought by accident. Added magic keypress for All Off.
-//                Added flash effect at powerup and on magic keypress.
-//                Decided to use Serial as MIDI to communicate with Organelle. Switchable for debug.
-//                Added support for a SysEx message from Organelle to set flags.
-// 2015-08-25 ptw Moved organ output to Serial3 -- third MIDI adapter is now external to console for hookup.
-//                Added trace of input notes in debug mode.
-//                Set a reasonable default so both keyboards work on powerup.
-//                Changed baud rate on Organelle's MIDI port to 38400; RasPi can't easily do 31250.
-// 2015-09-29 ptw Moved organ output to Serial2. Third MIDI adapter is now connected to the Organelle in
-//                both directions. Organelle manages external inputs and relays them to Serial3. We send
-//                a copy of the keyboard input to the Organelle for, e.g., game play.
-//                Removed debug mode; we aren't using Serial anymore.
-//
+// For change history, see https://github.com/OrganDonor/Console-Opus-1.2
+
 // Pin assignments for the control console:
 #define PIN_GREAT4MAIN  39
 #define PIN_GREAT4SUB   41
