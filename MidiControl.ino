@@ -94,20 +94,25 @@ boolean flagGhostBuster = true;	// enable constant stream of note_off to silent 
 #define SWELL_CHANNEL 1
 
 // There are three hardware MIDI shields connected, to Serial1 and Serial2 and Serial3.
-// Each has all three MIDI connectors: IN, OUT, and THRU.
+// Each has the MIDI IN and OUT connectors installed, but not the THRU connector (for
+// the Opus 1.2 console).
 // The IN connectors on Serial1 and Serial2 are wired up to the two manuals (keyboards),
 // which are traditionally called Great and Swell.
-// The IN connector on Serial3 can be connected to an external source of MIDI commands (probably a computer).
+// The IN and OUT connectors on Serial3 are connected to a USB MIDI adapter on the
+// Organelle (Raspberry Pi). The Organelle can generate its own MIDI commands to the
+// console and can also manage external MIDI sources. The output to the Organelle, when
+// enabled, echoes all notes played on the local keyboards.
 // The OUT connector on Serial1 is available for future expansion.
-// The OUT connector on Serial2 is available for future expansion.
-// The OUT connector on Serial3 is the output to the Organ Donor windchest (two J-Omega MTPs chained).
-// The THRU connectors are not currently used.
+// The OUT connector on Serial2 is the output to the Organ Donor windchest (two J-Omega
+// MTPs chained).
 //
-// In addition to the three MIDI shields, the default debug serial port (Serial) was once connected through
-// a voltage level converter, bidirectionally, to the serial port on the Organelle's Raspberry Pi.
-// This interface is also used as MIDI during normal operation, though it is not electrically MIDI.
-// It can also be used to carry debug data; this is enabled by grounding digital pin 2.
-// We don't use this anymore.
+// In addition to the three MIDI shields, the default debug serial port (Serial) was once
+// connected through // a voltage level converter, bidirectionally, to the serial port
+// on the Organelle's Raspberry Pi. This could be used for debug data, but the intent
+// was to use it as another MIDI-like port, though it is not electrically MIDI, and it
+// turns out that the Raspberry Pi's serial port can't easily do the standard MIDI
+// baud rate. In any case, we don't use this anymore. We leave Serial free for programming
+// via a USB cable connected to the Arduino's USB port.
 
 #define  midiOrgan  midi2   // output to the MTPs
 
@@ -116,17 +121,9 @@ boolean flagGhostBuster = true;	// enable constant stream of note_off to silent 
 #define  midiExt    midi3		// input from external MIDI controller (now the Organelle)
 #define	 midiElle   midi3		// output to the Raspberry Pi (Organelle)
 
-//MIDI_CREATE_INSTANCE(HardwareSerial, Serial,  midi0)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi1)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial2, midi2)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial3, midi3)
-
-struct MySettings : public midi::DefaultSettings
-{
-   static const long BaudRate = 38400; // Raspberry Pi can't easily do the standard baud rate
-};
-MIDI_CREATE_CUSTOM_INSTANCE(HardwareSerial, Serial, midi0, MySettings);
-
 
 // Each rank supports exactly 61 notes.
 #define  RANKS            2
