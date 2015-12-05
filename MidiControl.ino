@@ -83,12 +83,12 @@ boolean flagGhostBuster = true;	// enable constant stream of note_off to silent 
 // Organelle (Raspberry Pi). The Organelle can generate its own MIDI commands to the
 // console and can also manage external MIDI sources. The output to the Organelle, when
 // enabled, echoes all notes played on the local keyboards.
-// The OUT connector on Serial1 is available for future expansion.
+// The OUT connector on Serial1 is the output to the optional kiosk.
 // The OUT connector on Serial2 is the output to the Organ Donor windchest (two J-Omega
 // MTPs chained).
 //
 // In addition to the three MIDI shields, the default debug serial port (Serial) was once
-// connected through // a voltage level converter, bidirectionally, to the serial port
+// connected through a voltage level converter, bidirectionally, to the serial port
 // on the Organelle's Raspberry Pi. This could be used for debug data, but the intent
 // was to use it as another MIDI-like port, though it is not electrically MIDI, and it
 // turns out that the Raspberry Pi's serial port can't easily do the standard MIDI
@@ -96,6 +96,7 @@ boolean flagGhostBuster = true;	// enable constant stream of note_off to silent 
 // via a USB cable connected to the Arduino's USB port.
 
 #define  midiOrgan  midi2   // output to the MTPs
+#define  midiKiosk  midi1   // output to the optional kiosk
 
 #define  midiGreat  midi1		// input from lower keyboard
 #define  midiSwell  midi2		// input from upper keyboard
@@ -106,12 +107,16 @@ MIDI_CREATE_INSTANCE(HardwareSerial, Serial1, midi1)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial2, midi2)
 MIDI_CREATE_INSTANCE(HardwareSerial, Serial3, midi3)
 
+
+// The kiosk is configured to handle input on only a single MIDI channel. We will send
+// both ranks to that channel, and accept that this won't be correct when both ranks
+// are being played independently.
+#define  KIOSK_CHANNEL  1
+
 // Each rank supports exactly 61 notes.
 #define  RANKS            2
 #define  RANK0  0      // 8' rank
 #define  RANK1  1      // 4' rank
-
-// #define  notesPerRank    61
 
 // Ranks are 0-based (so we can use array indexing) but MIDI Channels start at 1.
 #define  channelForRank(x)   (x+1)
@@ -225,6 +230,7 @@ void requestOn(byte flag, byte rank, byte pitch)
     {
       noteCount++;
       midiOrgan.sendNoteOn(pitch, 127, channelForRank(rank));
+      midiKiosk.sendNoteOn(pitch, 127, KIOSK_CHANNEL);
       noteIsOn[rank][pitch] = newReq;
     }
 }
@@ -239,6 +245,7 @@ void requestOff(byte flag, byte rank, byte pitch)
   if (oldReq != 0  &&  newReq == 0)
   {
     midiOrgan.sendNoteOff(pitch, 0, channelForRank(rank));
+    midiKiosk.sendNoteOff(pitch, 0, KIOSK_CHANNEL);
     noteCount--;    
     noteIsOn[rank][pitch] = newReq;
   }
